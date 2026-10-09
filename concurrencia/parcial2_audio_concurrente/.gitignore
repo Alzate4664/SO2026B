@@ -7,3 +7,4 @@ tests/test_player
 tests/test_player_tsan
 tests/test_decoder
 tests/test_audio_pipeline
+tests/test_player_audio

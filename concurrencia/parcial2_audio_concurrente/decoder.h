@@ -11,6 +11,11 @@ typedef struct {
     int encoding;
 } AudioFormat;
 
+typedef int (*DecoderContinueCallback)(
+    void *context,
+    unsigned long generation
+);
+
 /*
  * Inicializa la biblioteca mpg123.
  * Debe llamarse una vez antes de decodificar.
@@ -28,6 +33,24 @@ void decoder_library_cleanup(void);
 int decoder_probe_file(
     const char *path,
     AudioFormat *format
+);
+
+/*
+ * Versión utilizada por el reproductor real.
+ *
+ * Cada bloque PCM queda marcado con generation.
+ * El callback permite interrumpir la decodificación si
+ * ocurre next, previous, stop o shutdown.
+ */
+int decoder_decode_file_tagged(
+    const char *path,
+    AudioBuffer *buffer,
+    AudioFormat *format,
+    size_t *total_bytes,
+    size_t *total_blocks,
+    unsigned long generation,
+    DecoderContinueCallback should_continue,
+    void *callback_context
 );
 
 /*

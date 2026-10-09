@@ -29,10 +29,11 @@ int audio_buffer_init(AudioBuffer *buffer)
     return 0;
 }
 
-int audio_buffer_write(
+int audio_buffer_write_tagged(
     AudioBuffer *buffer,
     const unsigned char *data,
-    size_t size)
+    size_t size,
+    unsigned long generation)
 {
     if (buffer == NULL || data == NULL || size > AUDIO_BLOCK_SIZE) {
         return -1;
@@ -40,14 +41,14 @@ int audio_buffer_write(
 
     pthread_mutex_lock(&buffer->mutex);
 
-    /*
-     * Si el buffer está lleno, el productor duerme.
-     *
-     * Usamos while y no if porque pthread_cond_wait puede
-     * despertar incluso si la condición todavía no se cumple.
-     */
-    while (buffer->count == AUDIO_BUFFER_SLOTS && !buffer->shutdown) {
-        pthread_cond_wait(&buffer->not_full, &buffer->mutex);
+    while (
+        buffer->count == AUDIO_BUFFER_SLOTS &&
+        !buffer->shutdown
+    ) {
+        pthread_cond_wait(
+            &buffer->not_full,
+            &buffer->mutex
+        );
     }
 
     if (buffer->shutdown) {
@@ -55,19 +56,97 @@ int audio_buffer_write(
         return -1;
     }
 
-    memcpy(buffer->data[buffer->write_pos], data, size);
+    memcpy(
+        buffer->data[buffer->write_pos],
+        data,
+        size
+    );
+
     buffer->sizes[buffer->write_pos] = size;
 
+    buffer->generations[buffer->write_pos] =
+        generation;
+
     buffer->write_pos =
-        (buffer->write_pos + 1) % AUDIO_BUFFER_SLOTS;
+        (buffer->write_pos + 1) %
+        AUDIO_BUFFER_SLOTS;
 
     buffer->count++;
 
-    /*
-     * Ahora existe al menos un elemento.
-     * Despertamos al consumidor.
-     */
     pthread_cond_signal(&buffer->not_empty);
+
+    pthread_mutex_unlock(&buffer->mutex);
+
+    return 0;
+}
+
+int audio_buffer_write(
+    AudioBuffer *buffer,
+    const unsigned char *data,
+    size_t size)
+{
+    return audio_buffer_write_tagged(
+        buffer,
+        data,
+        size,
+        0
+    );
+}
+
+int audio_buffer_read_tagged(
+    AudioBuffer *buffer,
+    unsigned char *data,
+    size_t *size,
+    unsigned long *generation)
+{
+    if (
+        buffer == NULL ||
+        data == NULL ||
+        size == NULL ||
+        generation == NULL
+    ) {
+        return -1;
+    }
+
+    pthread_mutex_lock(&buffer->mutex);
+
+    while (
+        buffer->count == 0 &&
+        !buffer->shutdown
+    ) {
+        pthread_cond_wait(
+            &buffer->not_empty,
+            &buffer->mutex
+        );
+    }
+
+    if (
+        buffer->shutdown &&
+        buffer->count == 0
+    ) {
+        pthread_mutex_unlock(&buffer->mutex);
+        return -1;
+    }
+
+    *size =
+        buffer->sizes[buffer->read_pos];
+
+    *generation =
+        buffer->generations[buffer->read_pos];
+
+    memcpy(
+        data,
+        buffer->data[buffer->read_pos],
+        *size
+    );
+
+    buffer->read_pos =
+        (buffer->read_pos + 1) %
+        AUDIO_BUFFER_SLOTS;
+
+    buffer->count--;
+
+    pthread_cond_signal(&buffer->not_full);
 
     pthread_mutex_unlock(&buffer->mutex);
 
@@ -79,51 +158,14 @@ int audio_buffer_read(
     unsigned char *data,
     size_t *size)
 {
-    if (buffer == NULL || data == NULL || size == NULL) {
-        return -1;
-    }
+    unsigned long ignored_generation = 0;
 
-    pthread_mutex_lock(&buffer->mutex);
-
-    /*
-     * Si está vacío, el consumidor duerme.
-     * No hacemos busy waiting.
-     */
-    while (buffer->count == 0 && !buffer->shutdown) {
-        pthread_cond_wait(&buffer->not_empty, &buffer->mutex);
-    }
-
-    /*
-     * Si estamos cerrando y no queda nada por consumir,
-     * terminamos.
-     */
-    if (buffer->shutdown && buffer->count == 0) {
-        pthread_mutex_unlock(&buffer->mutex);
-        return -1;
-    }
-
-    *size = buffer->sizes[buffer->read_pos];
-
-    memcpy(
+    return audio_buffer_read_tagged(
+        buffer,
         data,
-        buffer->data[buffer->read_pos],
-        *size
+        size,
+        &ignored_generation
     );
-
-    buffer->read_pos =
-        (buffer->read_pos + 1) % AUDIO_BUFFER_SLOTS;
-
-    buffer->count--;
-
-    /*
-     * Se liberó al menos una posición.
-     * Despertamos al productor.
-     */
-    pthread_cond_signal(&buffer->not_full);
-
-    pthread_mutex_unlock(&buffer->mutex);
-
-    return 0;
 }
 
 void audio_buffer_clear(AudioBuffer *buffer)

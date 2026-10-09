@@ -5,6 +5,7 @@
 
 #include "audio_buffer.h"
 #include "playlist.h"
+#include "decoder.h"
 
 typedef enum {
     PLAYER_STOPPED,
@@ -41,8 +42,23 @@ typedef struct {
     pthread_t decoder_thread;
     pthread_t audio_thread;
 
+    AudioFormat current_format;
+
+    int decoder_running;
+    int audio_running;
+
     int threads_started;
 } Player;
+
+/*
+ * Inicia los dos workers permanentes.
+ */
+int player_start_workers(Player *player);
+
+/*
+ * Espera y termina los workers.
+ */
+void player_join_workers(Player *player);
 
 int player_init(Player *player);
 

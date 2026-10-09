@@ -108,12 +108,15 @@ int decoder_probe_file(
     return 0;
 }
 
-int decoder_decode_file(
+int decoder_decode_file_tagged(
     const char *path,
     AudioBuffer *buffer,
     AudioFormat *format,
     size_t *total_bytes,
-    size_t *total_blocks)
+    size_t *total_blocks,
+    unsigned long generation,
+    DecoderContinueCallback should_continue,
+    void *callback_context)
 {
     if (
         path == NULL ||
@@ -142,12 +145,7 @@ int decoder_decode_file(
         return -1;
     }
 
-    /*
-     * Para simplificar la salida de audio posteriormente,
-     * pedimos PCM firmado de 16 bits.
-     */
     if (mpg123_format_none(handle) != MPG123_OK) {
-        fprintf(stderr, "No se pudo limpiar formatos mpg123\n");
         mpg123_delete(handle);
         return -1;
     }
@@ -166,12 +164,6 @@ int decoder_decode_file(
                 MPG123_ENC_SIGNED_16
             ) != MPG123_OK
         ) {
-            fprintf(
-                stderr,
-                "No se pudo habilitar rate %ld Hz\n",
-                rates[i]
-            );
-
             mpg123_delete(handle);
             return -1;
         }
@@ -203,7 +195,7 @@ int decoder_decode_file(
     ) {
         fprintf(
             stderr,
-            "No se pudo obtener el formato de '%s'\n",
+            "No se pudo obtener formato de '%s'\n",
             path
         );
 
@@ -222,6 +214,27 @@ int decoder_decode_file(
     int result = MPG123_OK;
 
     while (1) {
+        /*
+         * Antes de seguir decodificando comprobamos si
+         * esta reproducción sigue siendo vigente.
+         */
+        if (
+            should_continue != NULL &&
+            !should_continue(
+                callback_context,
+                generation
+            )
+        ) {
+            mpg123_close(handle);
+            mpg123_delete(handle);
+
+            /*
+             * No es un error: la reproducción fue
+             * cancelada intencionalmente.
+             */
+            return 1;
+        }
+
         size_t decoded_bytes = 0;
 
         result = mpg123_read(
@@ -231,9 +244,6 @@ int decoder_decode_file(
             &decoded_bytes
         );
 
-        /*
-         * mpg123 puede avisar que el formato cambió.
-         */
         if (result == MPG123_NEW_FORMAT) {
             if (
                 mpg123_getformat(
@@ -243,11 +253,8 @@ int decoder_decode_file(
                     &encoding
                 ) != MPG123_OK
             ) {
-                fprintf(stderr, "Error obteniendo nuevo formato\n");
-
                 mpg123_close(handle);
                 mpg123_delete(handle);
-
                 return -1;
             }
 
@@ -257,17 +264,49 @@ int decoder_decode_file(
         }
 
         if (decoded_bytes > 0) {
+            /*
+             * Volvemos a comprobar después de mpg123_read()
+             * para reducir todavía más la latencia de next/stop.
+             */
             if (
-                audio_buffer_write(
+                should_continue != NULL &&
+                !should_continue(
+                    callback_context,
+                    generation
+                )
+            ) {
+                mpg123_close(handle);
+                mpg123_delete(handle);
+
+                return 1;
+            }
+
+            if (
+                audio_buffer_write_tagged(
                     buffer,
                     pcm,
-                    decoded_bytes
+                    decoded_bytes,
+                    generation
                 ) != 0
             ) {
                 /*
-                 * También puede ocurrir si el reproductor
-                 * está siendo apagado.
+                 * Si el reproductor cambió de generación, hizo stop
+                 * o entró en shutdown mientras estábamos esperando
+                 * espacio en el buffer, no es un error de decodificación.
                  */
+                if (
+                    should_continue != NULL &&
+                    !should_continue(
+                        callback_context,
+                        generation
+                    )
+                ) {
+                    mpg123_close(handle);
+                    mpg123_delete(handle);
+
+                    return 1;
+                }
+
                 mpg123_close(handle);
                 mpg123_delete(handle);
 
@@ -304,4 +343,23 @@ int decoder_decode_file(
     mpg123_delete(handle);
 
     return 0;
+}
+
+int decoder_decode_file(
+    const char *path,
+    AudioBuffer *buffer,
+    AudioFormat *format,
+    size_t *total_bytes,
+    size_t *total_blocks)
+{
+    return decoder_decode_file_tagged(
+        path,
+        buffer,
+        format,
+        total_bytes,
+        total_blocks,
+        0,
+        NULL,
+        NULL
+    );
 }

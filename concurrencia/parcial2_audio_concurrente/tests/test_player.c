@@ -93,6 +93,17 @@ int main(void)
         return EXIT_FAILURE;
     }
 
+    if (
+        playlist_add(&player.playlist, "track_1.mp3") != 0 ||
+        playlist_add(&player.playlist, "track_2.mp3") != 0 ||
+        playlist_add(&player.playlist, "track_3.mp3") != 0
+    ) {
+        fprintf(stderr, "No se pudieron agregar pistas de prueba\n");
+
+        player_destroy(&player);
+        return EXIT_FAILURE;
+    }
+
     int failed = 0;
 
     /*

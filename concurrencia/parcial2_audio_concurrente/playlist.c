@@ -240,6 +240,102 @@ void playlist_clear(Playlist *playlist)
     pthread_rwlock_unlock(&playlist->lock);
 }
 
+int playlist_get_current(
+    Playlist *playlist,
+    Track *destination,
+    size_t *index)
+{
+    if (
+        playlist == NULL ||
+        destination == NULL
+    ) {
+        return -1;
+    }
+
+    pthread_rwlock_rdlock(&playlist->lock);
+
+    if (playlist->count == 0) {
+        pthread_rwlock_unlock(&playlist->lock);
+        return -1;
+    }
+
+    if (playlist->current_index >= playlist->count) {
+        pthread_rwlock_unlock(&playlist->lock);
+        return -1;
+    }
+
+    *destination =
+        playlist->tracks[playlist->current_index];
+
+    if (index != NULL) {
+        *index = playlist->current_index;
+    }
+
+    pthread_rwlock_unlock(&playlist->lock);
+
+    return 0;
+}
+
+int playlist_next(Playlist *playlist)
+{
+    if (playlist == NULL) {
+        return -1;
+    }
+
+    pthread_rwlock_wrlock(&playlist->lock);
+
+    if (playlist->count == 0) {
+        pthread_rwlock_unlock(&playlist->lock);
+        return -1;
+    }
+
+    playlist->current_index =
+        (playlist->current_index + 1) %
+        playlist->count;
+
+    pthread_rwlock_unlock(&playlist->lock);
+
+    return 0;
+}
+
+int playlist_previous(Playlist *playlist)
+{
+    if (playlist == NULL) {
+        return -1;
+    }
+
+    pthread_rwlock_wrlock(&playlist->lock);
+
+    if (playlist->count == 0) {
+        pthread_rwlock_unlock(&playlist->lock);
+        return -1;
+    }
+
+    if (playlist->current_index == 0) {
+        playlist->current_index =
+            playlist->count - 1;
+    } else {
+        playlist->current_index--;
+    }
+
+    pthread_rwlock_unlock(&playlist->lock);
+
+    return 0;
+}
+
+void playlist_reset_current(Playlist *playlist)
+{
+    if (playlist == NULL) {
+        return;
+    }
+
+    pthread_rwlock_wrlock(&playlist->lock);
+
+    playlist->current_index = 0;
+
+    pthread_rwlock_unlock(&playlist->lock);
+}
+
 void playlist_destroy(Playlist *playlist)
 {
     if (playlist == NULL) {

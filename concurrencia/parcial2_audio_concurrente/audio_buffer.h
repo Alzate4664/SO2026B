@@ -11,6 +11,8 @@ typedef struct {
     unsigned char data[AUDIO_BUFFER_SLOTS][AUDIO_BLOCK_SIZE];
     size_t sizes[AUDIO_BUFFER_SLOTS];
 
+    unsigned long generations[AUDIO_BUFFER_SLOTS];
+
     int read_pos;
     int write_pos;
     int count;
@@ -37,6 +39,24 @@ int audio_buffer_read(
     AudioBuffer *buffer,
     unsigned char *data,
     size_t *size
+);
+
+/*
+ * Versiones etiquetadas con una generación de reproducción.
+ * Se usarán para descartar PCM perteneciente a canciones anteriores.
+ */
+int audio_buffer_write_tagged(
+    AudioBuffer *buffer,
+    const unsigned char *data,
+    size_t size,
+    unsigned long generation
+);
+
+int audio_buffer_read_tagged(
+    AudioBuffer *buffer,
+    unsigned char *data,
+    size_t *size,
+    unsigned long *generation
 );
 
 /* Vacía el contenido pendiente del buffer. */
