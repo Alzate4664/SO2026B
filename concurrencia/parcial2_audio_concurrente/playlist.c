@@ -81,7 +81,9 @@ int playlist_add(Playlist *playlist, const char *path)
     return 0;
 }
 
-int playlist_remove(Playlist *playlist, size_t index)
+int playlist_remove(
+    Playlist *playlist,
+    size_t index)
 {
     if (playlist == NULL) {
         return -1;
@@ -94,16 +96,47 @@ int playlist_remove(Playlist *playlist, size_t index)
         return -1;
     }
 
-    for (size_t i = index; i + 1 < playlist->count; i++) {
-        playlist->tracks[i] = playlist->tracks[i + 1];
+    size_t old_current =
+        playlist->current_index;
+
+    for (
+        size_t i = index;
+        i + 1 < playlist->count;
+        i++
+    ) {
+        playlist->tracks[i] =
+            playlist->tracks[i + 1];
     }
 
     playlist->count--;
 
     if (playlist->count == 0) {
         playlist->current_index = 0;
-    } else if (playlist->current_index >= playlist->count) {
-        playlist->current_index = playlist->count - 1;
+    } else if (index < old_current) {
+        /*
+         * Se eliminó una pista anterior a la actual.
+         * La pista actual se desplazó una posición atrás.
+         */
+        playlist->current_index =
+            old_current - 1;
+    } else if (index == old_current) {
+        /*
+         * Se eliminó la pista seleccionada.
+         *
+         * Dejamos current_index en la misma posición para
+         * seleccionar la siguiente pista. Si era la última,
+         * volvemos a la nueva última.
+         */
+        if (
+            old_current >=
+            playlist->count
+        ) {
+            playlist->current_index =
+                playlist->count - 1;
+        } else {
+            playlist->current_index =
+                old_current;
+        }
     }
 
     pthread_rwlock_unlock(&playlist->lock);
@@ -135,19 +168,66 @@ int playlist_move(
         return 0;
     }
 
-    Track temp = playlist->tracks[from];
+    Track moved_track =
+        playlist->tracks[from];
 
+    size_t old_current =
+        playlist->current_index;
+
+    /*
+     * Movemos físicamente la pista.
+     */
     if (from < to) {
         for (size_t i = from; i < to; i++) {
-            playlist->tracks[i] = playlist->tracks[i + 1];
+            playlist->tracks[i] =
+                playlist->tracks[i + 1];
         }
     } else {
         for (size_t i = from; i > to; i--) {
-            playlist->tracks[i] = playlist->tracks[i - 1];
+            playlist->tracks[i] =
+                playlist->tracks[i - 1];
         }
     }
 
-    playlist->tracks[to] = temp;
+    playlist->tracks[to] =
+        moved_track;
+
+    /*
+     * Ajustamos current_index para que siga apuntando
+     * a la misma pista lógica que antes del movimiento.
+     */
+    if (old_current == from) {
+        /*
+         * Se movió precisamente la pista actual.
+         */
+        playlist->current_index = to;
+    } else if (
+        from < old_current &&
+        old_current <= to
+    ) {
+        /*
+         * Una pista situada antes de la actual se movió
+         * hacia una posición posterior.
+         *
+         * La pista actual se desplazó una posición
+         * hacia la izquierda.
+         */
+        playlist->current_index =
+            old_current - 1;
+    } else if (
+        to <= old_current &&
+        old_current < from
+    ) {
+        /*
+         * Una pista situada después de la actual se movió
+         * antes de ella.
+         *
+         * La pista actual se desplazó una posición
+         * hacia la derecha.
+         */
+        playlist->current_index =
+            old_current + 1;
+    }
 
     pthread_rwlock_unlock(&playlist->lock);
 
