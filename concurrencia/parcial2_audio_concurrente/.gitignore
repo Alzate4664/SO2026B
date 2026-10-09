@@ -1,4 +1,4 @@
 *.o
 audio_player
 tests/test_buffer
-tests/test_playlist
+tests/test_playlisttests/test_playlist_tsan
