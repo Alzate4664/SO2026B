@@ -5,3 +5,4 @@ tests/test_playlist
 tests/test_playlist_tsan
 tests/test_player
 tests/test_player_tsan
+tests/test_decoder
