@@ -23,6 +23,14 @@ int decoder_library_init(void);
 void decoder_library_cleanup(void);
 
 /*
+ * Consulta el formato PCM de un MP3 sin decodificarlo completo.
+ */
+int decoder_probe_file(
+    const char *path,
+    AudioFormat *format
+);
+
+/*
  * Decodifica un archivo MP3 a PCM y deposita los bloques
  * resultantes dentro del AudioBuffer.
  */

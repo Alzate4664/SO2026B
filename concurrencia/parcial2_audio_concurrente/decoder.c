@@ -20,6 +20,94 @@ void decoder_library_cleanup(void)
     mpg123_exit();
 }
 
+int decoder_probe_file(
+    const char *path,
+    AudioFormat *format)
+{
+    if (path == NULL || format == NULL) {
+        return -1;
+    }
+
+    int error = MPG123_OK;
+
+    mpg123_handle *handle = mpg123_new(NULL, &error);
+
+    if (handle == NULL) {
+        fprintf(
+            stderr,
+            "No se pudo crear decoder mpg123: %s\n",
+            mpg123_plain_strerror(error)
+        );
+
+        return -1;
+    }
+
+    if (mpg123_format_none(handle) != MPG123_OK) {
+        mpg123_delete(handle);
+        return -1;
+    }
+
+    const long *rates = NULL;
+    size_t rate_count = 0;
+
+    mpg123_rates(&rates, &rate_count);
+
+    for (size_t i = 0; i < rate_count; i++) {
+        if (
+            mpg123_format(
+                handle,
+                rates[i],
+                MPG123_MONO | MPG123_STEREO,
+                MPG123_ENC_SIGNED_16
+            ) != MPG123_OK
+        ) {
+            mpg123_delete(handle);
+            return -1;
+        }
+    }
+
+    if (mpg123_open(handle, path) != MPG123_OK) {
+        fprintf(
+            stderr,
+            "No se pudo abrir '%s': %s\n",
+            path,
+            mpg123_strerror(handle)
+        );
+
+        mpg123_delete(handle);
+        return -1;
+    }
+
+    long rate = 0;
+    int channels = 0;
+    int encoding = 0;
+
+    if (
+        mpg123_getformat(
+            handle,
+            &rate,
+            &channels,
+            &encoding
+        ) != MPG123_OK
+    ) {
+        fprintf(stderr, "No se pudo consultar formato de '%s'\n", path);
+
+        mpg123_close(handle);
+        mpg123_delete(handle);
+
+        return -1;
+    }
+
+    format->rate = rate;
+    format->channels = channels;
+    format->encoding = encoding;
+
+    mpg123_close(handle);
+    mpg123_delete(handle);
+
+    return 0;
+}
+
 int decoder_decode_file(
     const char *path,
     AudioBuffer *buffer,
