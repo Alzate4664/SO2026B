@@ -1,0 +1,4 @@
+*.o
+audio_player
+tests/test_buffer
+tests/test_playlist
