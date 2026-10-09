@@ -90,6 +90,51 @@ static void *decoder_worker(void *arg)
                 track.path
             );
 
+            player->consecutive_decode_failures++;
+
+            size_t playlist_size =
+                playlist_count(&player->playlist);
+
+            if (
+                playlist_size == 0 ||
+                player->consecutive_decode_failures >= playlist_size
+            ) {
+                pthread_mutex_lock(
+                    &player->state_mutex
+                );
+
+                if (
+                    player->state != PLAYER_SHUTDOWN
+                ) {
+                    player->state = PLAYER_STOPPED;
+                }
+
+                pthread_cond_broadcast(
+                    &player->state_changed
+                );
+
+                pthread_mutex_unlock(
+                    &player->state_mutex
+                );
+
+                player->consecutive_decode_failures = 0;
+
+                playlist_reset_current(
+                    &player->playlist
+                );
+
+                player->consecutive_decode_failures = 0;
+
+                playlist_reset_current(&player->playlist);
+
+                fprintf(
+                    stderr,
+                    "[decoder] Ninguna pista pudo abrirse. Reproduccion detenida.\n"
+                );
+
+                continue;
+            }
+
             if (
                 playlist_next(
                     &player->playlist
@@ -505,6 +550,8 @@ int player_init(Player *player)
     player->current_format.rate = 0;
     player->current_format.channels = 0;
     player->current_format.encoding = 0;
+
+    player->consecutive_decode_failures = 0;
 
     if (pthread_mutex_init(&player->state_mutex, NULL) != 0) {
         return -1;

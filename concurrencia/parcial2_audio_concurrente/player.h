@@ -47,6 +47,8 @@ typedef struct {
     int decoder_running;
     int audio_running;
 
+    size_t consecutive_decode_failures;
+
     int threads_started;
 } Player;
 
