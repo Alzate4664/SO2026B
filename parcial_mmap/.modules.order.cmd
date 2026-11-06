@@ -1,0 +1,1 @@
+savedcmd_/home/alzate46/SistemasOperativos/SO2026B/parcial_mmap/modules.order := {   echo /home/alzate46/SistemasOperativos/SO2026B/parcial_mmap/mmap_guard.o; :; } > /home/alzate46/SistemasOperativos/SO2026B/parcial_mmap/modules.order

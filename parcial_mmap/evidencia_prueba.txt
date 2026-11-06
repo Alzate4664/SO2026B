@@ -1,0 +1,2 @@
+MAP_SHARED writable: denied (Operation not permitted)
+file size before=0 after=4096; private write is COW
