@@ -1,0 +1,9 @@
+vmlinux.h
+*.o
+*.ko
+*.mod
+*.mod.c
+.modules.order.cmd
+.*.cmd
+modules.order
+tests/mmap_policy_test
